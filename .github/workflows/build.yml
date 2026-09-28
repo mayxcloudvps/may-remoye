@@ -1,0 +1,78 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.7"
+      - name: Build APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+      - name: Đổi tên APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk RemotePC.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemotePC-apk
+          path: RemotePC.apk
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Cài thư viện
+        run: pip install pyinstaller -r server/requirements.txt -r client_windows/requirements.txt
+      - name: Build server .exe
+        working-directory: server
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name RemotePlayServer \
+            --collect-all av --collect-all dxcam --collect-all comtypes --collect-all pyaudiowpatch \
+            server_gui.py
+      - name: Build client .exe
+        working-directory: client_windows
+        run: |
+          pyinstaller --noconfirm --onefile --windowed --name RemotePlayClient \
+            --collect-all av --collect-all sounddevice --collect-all _sounddevice_data \
+            client_gui.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemotePlayServer-exe
+          path: server/dist/RemotePlayServer.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RemotePlayClient-exe
+          path: client_windows/dist/RemotePlayClient.exe
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/**/*
+          
