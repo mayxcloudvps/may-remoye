@@ -1,0 +1,4 @@
+av>=12
+dxcam
+numpy
+pyaudiowpatch
